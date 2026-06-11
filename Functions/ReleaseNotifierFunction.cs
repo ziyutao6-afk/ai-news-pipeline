@@ -30,6 +30,11 @@ public class ReleaseNotifierFunction
     public async Task Run([TimerTrigger("0 */15 * * * *")] TimerInfo timerInfo)
     {
         _logger.LogInformation("ReleaseNotifier function started at: {Time}", DateTime.UtcNow);
+        if (!LegacyFunctionGate.IsEnabled())
+        {
+            _logger.LogInformation("Legacy release functions are disabled. Set ENABLE_LEGACY_RELEASE_FUNCTIONS=true to enable.");
+            return;
+        }
 
         try
         {

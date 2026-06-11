@@ -40,6 +40,11 @@ public class WeeklyCliRecapFunction
     public async Task Run([TimerTrigger("0 0 17,18 * * 6")] TimerInfo timerInfo)
     {
         _logger.LogInformation("WeeklyCliRecap function started at: {Time}", DateTime.UtcNow);
+        if (!LegacyFunctionGate.IsEnabled())
+        {
+            _logger.LogInformation("Legacy release functions are disabled. Set ENABLE_LEGACY_RELEASE_FUNCTIONS=true to enable.");
+            return;
+        }
 
         try
         {

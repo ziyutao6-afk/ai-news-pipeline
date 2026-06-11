@@ -30,3 +30,30 @@ Thumbs.db
 *.nupkg
 packages/
 AutoTweetRss.csproj.lscache
+
+# Local development tools and caches
+.dotnet/
+.dotnet-home/
+.home/
+.tools/
+.npm-cache/
+.nuget/
+.local-nuget-feed/
+.nuget-download-work/
+.local/
+azurite/
+NuGet.Config
+
+# Node / frontend artifacts
+node_modules/
+.next/
+dist/
+build/
+coverage/
+*.log
+
+# Local secrets and runtime configuration
+.env
+.env.local
+local.settings.json
+*.local.settings.json

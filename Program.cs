@@ -27,8 +27,13 @@ var host = new HostBuilder()
         
         // Register services
         services.AddSingleton<RssFeedService>();
+        services.AddSingleton<OpenAiNewsTweetService>();
+        services.AddSingleton<TelegramNotificationService>();
+        services.AddSingleton<TweetImageService>();
+        services.AddSingleton<NewsPendingPostStore>();
         services.AddSingleton<OAuth1Helper>();
         services.AddSingleton<TwitterApiClient>();
+        services.AddHostedService<TwitterStartupHealthLogger>();
         services.AddSingleton(sp =>
         {
             var logger = sp.GetRequiredService<ILogger<VSCodeTwitterApiClient>>();

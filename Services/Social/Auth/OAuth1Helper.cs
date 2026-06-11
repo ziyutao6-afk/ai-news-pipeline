@@ -56,17 +56,18 @@ public class OAuth1Helper
             { "oauth_version", "1.0" }
         };
 
+        var signatureParams = new SortedDictionary<string, string>(oauthParams);
         if (extraParameters != null)
         {
             foreach (var parameter in extraParameters)
             {
-                oauthParams[parameter.Key] = parameter.Value;
+                signatureParams[parameter.Key] = parameter.Value;
             }
         }
 
         // Create signature base string
         var parameterString = string.Join("&", 
-            oauthParams.Select(kvp => $"{PercentEncode(kvp.Key)}={PercentEncode(kvp.Value)}"));
+            signatureParams.Select(kvp => $"{PercentEncode(kvp.Key)}={PercentEncode(kvp.Value)}"));
         
         var signatureBaseString = $"{httpMethod.ToUpper()}&{PercentEncode(url)}&{PercentEncode(parameterString)}";
 

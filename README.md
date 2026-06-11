@@ -1,6 +1,6 @@
 # Auto Tweet RSS
 
-An Azure Function that monitors GitHub Copilot releases RSS feeds and automatically tweets about new stable releases.
+An Azure Function that monitors RSS feeds, generates English X post drafts plus Chinese briefs, and sends them to Telegram for manual review and posting.
 
 ## Table of Contents
 
@@ -23,7 +23,10 @@ An Azure Function that monitors GitHub Copilot releases RSS feeds and automatica
 - **AI-powered threaded posts**: Uses Microsoft.Extensions.AI with Azure OpenAI to generate concise, emoji-enhanced threads with top highlights in the first post, grouped follow-up posts, and the release link in the final post
 - **Optional Premium X mega-posts**: Per-account settings can switch X output from thread mode to a single post (up to 25,000 chars) organized into Top features, Enhancements, Bug fixes, and Misc
 - **Deterministic fallback**: When AI is unavailable, threads are built from HTML-parsed release notes so posting always succeeds
-- Posts to Twitter/X using OAuth 1.0a authentication (with reply-chain thread support)
+- Supports Telegram review cards with source link, source image preview, AI market impact analysis, and a `🚀 Post to X` button
+- Manual mode does not log in to X, store X passwords, store browser cookies, upload media to X, or click publish for you
+- X Web Intent can only prefill text and links; images are sent separately in Telegram and must be uploaded to X manually
+- Real one-click Telegram publishing uses the existing X API module and remains behind `DRY_RUN=false` plus `X_API_ENABLED=true`
 - Cross-posts VS Code automation to Bluesky (with AT Protocol reply thread support)
 - Tracks state in Azure Blob Storage to prevent duplicate posts (separate state for CLI and SDK)
 - Respects platform character limits (280 for X, 300 for Bluesky) per post in the thread
@@ -83,7 +86,8 @@ https://github.com/.../releases/tag/v1.2.3
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Azure Functions Core Tools v4](https://docs.microsoft.com/azure/azure-functions/functions-run-local)
 - [Azurite](https://docs.microsoft.com/azure/storage/common/storage-use-azurite) (for local development) or an Azure Storage account
-- Twitter Developer Account with OAuth 1.0a credentials
+- Telegram bot token and chat ID for manual review messages
+- Twitter/X Developer credentials are not required for the default manual posting mode
 - Bluesky account + App Password (only required if you want VS Code cross-posting)
 
 ## Configuration
@@ -99,10 +103,23 @@ Create a `local.settings.json` file in the project root (this file is git-ignore
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
     
-    "TWITTER_API_KEY": "<your-consumer-key>",
-    "TWITTER_API_SECRET": "<your-consumer-secret>",
-    "TWITTER_ACCESS_TOKEN": "<your-access-token>",
-    "TWITTER_ACCESS_TOKEN_SECRET": "<your-access-token-secret>",
+    "X_API_ENABLED": "false",
+    "MANUAL_X_POST_MODE": "true",
+    "GENERATE_X_INTENT_LINK": "true",
+
+    "TELEGRAM_ENABLED": "true",
+    "TELEGRAM_REVIEW_MODE": "true",
+    "TELEGRAM_BOT_USERNAME": "@your_bot_username",
+    "TELEGRAM_BOT_TOKEN": "<your-telegram-bot-token>",
+    "TELEGRAM_CHAT_ID": "<your-telegram-chat-id>",
+    "ENABLE_TWEET_IMAGE": "true",
+    "DEFAULT_TWEET_IMAGE_PATH": "assets/default-news.png",
+    "MIN_AI_IMPACT_SCORE": "7",
+
+    "TWITTER_API_KEY": "",
+    "TWITTER_API_SECRET": "",
+    "TWITTER_ACCESS_TOKEN": "",
+    "TWITTER_ACCESS_TOKEN_SECRET": "",
 
     "TWITTER_VSCODE_API_KEY": "<your-vscode-consumer-key>",
     "TWITTER_VSCODE_API_SECRET": "<your-vscode-consumer-secret>",
@@ -132,10 +149,21 @@ Create a `local.settings.json` file in the project root (this file is git-ignore
 |----------|-------------|----------|
 | `AzureWebJobsStorage` | Azure Storage connection for Functions runtime | Yes |
 | `FUNCTIONS_WORKER_RUNTIME` | Must be `dotnet-isolated` | Yes |
-| `TWITTER_API_KEY` | Twitter OAuth 1.0a Consumer Key (API Key) | Yes |
-| `TWITTER_API_SECRET` | Twitter OAuth 1.0a Consumer Secret (API Secret) | Yes |
-| `TWITTER_ACCESS_TOKEN` | Twitter OAuth 1.0a Access Token | Yes |
-| `TWITTER_ACCESS_TOKEN_SECRET` | Twitter OAuth 1.0a Access Token Secret | Yes |
+| `X_API_ENABLED` | Enables real X API calls when `true`. Keep `false` for zero X API cost review/dry-run mode. | No (default: `true`) |
+| `MANUAL_X_POST_MODE` | Sends Telegram review messages and skips timer-based live publishing when `true`. The Telegram button can still publish when `DRY_RUN=false` and `X_API_ENABLED=true`. | No (recommended: `true`) |
+| `GENERATE_X_INTENT_LINK` | Adds `https://twitter.com/intent/tweet?text=...` draft links to Telegram messages. | No (default: `true`) |
+| `TELEGRAM_ENABLED` | Enables Telegram review notifications. | Yes for manual mode |
+| `TELEGRAM_REVIEW_MODE` | Keeps generated posts in review instead of live publishing. | Yes for manual mode |
+| `TELEGRAM_BOT_USERNAME` | Telegram bot username shown in diagnostics. | No |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token. | Yes for manual mode |
+| `TELEGRAM_CHAT_ID` | Telegram chat ID to receive review messages. | Yes for manual mode |
+| `ENABLE_TWEET_IMAGE` | Sends image previews to Telegram when an article image/default image is available. | No (default: `true`) |
+| `DEFAULT_TWEET_IMAGE_PATH` | Local fallback image path used when no article image is found. | No |
+| `MIN_AI_IMPACT_SCORE` | Minimum GPT market-impact score for priority/autopost eligibility. Lower scores are still sent to Telegram as `Low impact`. | No (default: `7`) |
+| `TWITTER_API_KEY` | Legacy Twitter OAuth 1.0a Consumer Key. Leave empty when `X_API_ENABLED=false`. | No |
+| `TWITTER_API_SECRET` | Legacy Twitter OAuth 1.0a Consumer Secret. Leave empty when `X_API_ENABLED=false`. | No |
+| `TWITTER_ACCESS_TOKEN` | Legacy Twitter OAuth 1.0a Access Token. Leave empty when `X_API_ENABLED=false`. | No |
+| `TWITTER_ACCESS_TOKEN_SECRET` | Legacy Twitter OAuth 1.0a Access Token Secret. Leave empty when `X_API_ENABLED=false`. | No |
 | `TWITTER_VSCODE_API_KEY` | Twitter OAuth 1.0a Consumer Key for VS Code updates | Yes (for VS Code tweets) |
 | `TWITTER_VSCODE_API_SECRET` | Twitter OAuth 1.0a Consumer Secret for VS Code updates | Yes (for VS Code tweets) |
 | `TWITTER_VSCODE_ACCESS_TOKEN` | Twitter OAuth 1.0a Access Token for VS Code updates | Yes (for VS Code tweets) |
@@ -166,17 +194,103 @@ To enable VS Code cross-posting to Bluesky:
    - `BLUESKY_HANDLE` (your handle)
    - `BLUESKY_APP_PASSWORD` (the generated app password)
 
+### Telegram Manual X Posting
+
+The default news workflow is a no X API cost setup:
+
+1. RSS feeds are fetched.
+2. Local scoring selects candidates.
+3. OpenAI generates an English post draft and Chinese brief.
+4. The image extractor prepares an article image or local fallback image.
+5. Telegram receives one review card per candidate with:
+   - Title
+   - Short headline
+   - AI summary
+   - Market Impact: Bullish / Bearish / Neutral
+   - Impact Score
+   - Affected Assets
+   - Winners
+   - Losers
+   - Trade Take
+   - AI Confidence Score
+   - Source URL and `source_url`
+   - Image URL / Local image path
+   - Final X Post
+   - Inline buttons: `🚀 Post to X`, `❌ Skip`, and `🔗 Open Source`
+6. With `DRY_RUN=true`, clicking the button simulates publishing and marks the item as posted to prevent duplicate clicks.
+7. With `DRY_RUN=false` and `X_API_ENABLED=true`, clicking the button publishes the saved final X post through the existing X module. If a local image file exists, it is attached to the X post; otherwise the post falls back to text plus source link.
+
+The X Web Intent link is generated as:
+
+```text
+https://twitter.com/intent/tweet?text=<url_encoded_tweet_text>
+```
+
+where `tweet_text` is:
+
+```text
+englishTweetBody + " " + article.Url
+```
+
+Important behavior:
+
+- X Web Intent only pre-fills text and links.
+- Images cannot be attached automatically through Web Intent.
+- When `ENABLE_TWEET_IMAGE=true`, Telegram sends the original article/OpenGraph/Twitter-card image as a preview when available.
+- Image download failures do not block review; the app degrades to text plus source link.
+- The app stores each candidate as `pending`, `posted`, `skipped`, or `failed` with id, title, source URL, image URL, local image path, AI analysis, final X post, and creation time.
+- The Telegram button only works for `pending` items. Already posted items cannot be posted again.
+- `❌ Skip` only works for `pending` items and changes the stored status to `skipped`.
+- The app does not use Selenium, Playwright, browser cookies, saved X usernames/passwords, or simulated clicks.
+- With `X_API_ENABLED=false`, the app does not call X API endpoints and will not trigger X API usage fees. In that mode, keep `DRY_RUN=true` for button testing.
+
+### Telegram Post to X Button
+
+The inline keyboard button uses this Function endpoint:
+
+```text
+POST /api/telegram/x-callback
+```
+
+Local callback URL:
+
+```text
+http://127.0.0.1:7071/api/telegram/x-callback
+```
+
+For a deployed Function App, set the Telegram webhook to the deployed URL, including the function key if your deployment uses Function authorization:
+
+```bash
+curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://<your-function-app>.azurewebsites.net/api/telegram/x-callback?code=<function-key>"
+```
+
+To test the button without real X posting:
+
+```json
+{
+  "DRY_RUN": "true",
+  "X_API_ENABLED": "false",
+  "MANUAL_X_POST_MODE": "true"
+}
+```
+
+To allow the button to really publish to X:
+
+```json
+{
+  "DRY_RUN": "false",
+  "X_API_ENABLED": "true",
+  "MANUAL_X_POST_MODE": "true",
+  "TWITTER_API_KEY": "...",
+  "TWITTER_API_SECRET": "...",
+  "TWITTER_ACCESS_TOKEN": "...",
+  "TWITTER_ACCESS_TOKEN_SECRET": "..."
+}
+```
+
 ### Getting Twitter OAuth 1.0a Credentials
 
-1. Go to [Twitter Developer Portal](https://developer.twitter.com/en/portal/dashboard)
-2. Create a new App or use an existing one
-3. Navigate to "Keys and tokens"
-4. Generate/copy:
-   - API Key → `TWITTER_API_KEY`
-   - API Secret → `TWITTER_API_SECRET`
-   - Access Token → `TWITTER_ACCESS_TOKEN`
-   - Access Token Secret → `TWITTER_ACCESS_TOKEN_SECRET`
-5. Ensure your app has **Read and Write** permissions
+This is only needed if you intentionally re-enable legacy automatic X API publishing with `X_API_ENABLED=true`. Manual Telegram mode does not need X developer credentials.
 
 ### Setting up Azure OpenAI (Optional but Recommended)
 

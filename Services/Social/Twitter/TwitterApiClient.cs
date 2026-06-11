@@ -9,6 +9,7 @@ public class TwitterApiClient
 {
     private const string TwitterApiUrl = "https://api.x.com/2/tweets";
     private const string MediaUploadUrl = "https://upload.twitter.com/1.1/media/upload.json";
+    private const string VerifyCredentialsUrl = "https://api.twitter.com/1.1/account/verify_credentials.json";
     private const int MediaUploadChunkSize = 4 * 1024 * 1024;
 
     private readonly ILogger _logger;
@@ -18,7 +19,13 @@ public class TwitterApiClient
     /// <summary>
     /// Whether the Twitter credentials are configured.
     /// </summary>
-    public bool IsConfigured => _oauth1Helper.IsConfigured;
+    public bool IsConfigured => XApiEnabled && _oauth1Helper.IsConfigured;
+    public static bool XApiEnabled => IsEnabled("X_API_ENABLED", defaultValue: true);
+
+    public bool ApiKeyPresent => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("TWITTER_API_KEY"));
+    public bool ApiSecretPresent => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("TWITTER_API_SECRET"));
+    public bool AccessTokenPresent => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("TWITTER_ACCESS_TOKEN"));
+    public bool AccessSecretPresent => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("TWITTER_ACCESS_TOKEN_SECRET"));
 
     public TwitterApiClient(
         ILogger<TwitterApiClient> logger,
@@ -63,6 +70,12 @@ public class TwitterApiClient
 
     public async Task<string?> PostTweetAndGetIdAsync(SocialMediaPost post, string? replyToTweetId = null)
     {
+        if (!XApiEnabled)
+        {
+            _logger.LogInformation("X_API_ENABLED=false. Skipping X API tweet publish.");
+            return null;
+        }
+
         if (!IsConfigured)
         {
             _logger.LogWarning("Twitter credentials not configured. Skipping tweet.");
@@ -83,6 +96,10 @@ public class TwitterApiClient
                 _oauth1Helper.ConsumerKeyPrefix);
 
             var mediaIds = await UploadMediaAsync(post.MediaUrlsOrEmpty);
+            _logger.LogInformation("Media upload completed. Requested={RequestedCount}, Uploaded={UploadedCount}, MediaIds={MediaIds}",
+                post.MediaUrlsOrEmpty.Count,
+                mediaIds.Count,
+                string.Join(",", mediaIds));
             var authHeader = _oauth1Helper.GenerateAuthorizationHeader("POST", TwitterApiUrl);
 
             using var request = new HttpRequestMessage(HttpMethod.Post, TwitterApiUrl);
@@ -121,6 +138,157 @@ public class TwitterApiClient
             _logger.LogError(ex, "Error posting tweet");
             return null;
         }
+    }
+
+    public async Task<TwitterHealthResult> CheckHealthAsync(CancellationToken cancellationToken = default)
+    {
+        var errors = new List<string>();
+        var warnings = new List<string>();
+        var result = new TwitterHealthResult
+        {
+            XApiEnabled = XApiEnabled,
+            ApiKeyPresent = ApiKeyPresent,
+            ApiSecretPresent = ApiSecretPresent,
+            AccessTokenPresent = AccessTokenPresent,
+            AccessSecretPresent = AccessSecretPresent,
+            TwitterConfigured = IsConfigured
+        };
+
+        if (!XApiEnabled)
+        {
+            warnings.Add("X_API_ENABLED=false. X API health checks, media uploads, and publishing are disabled.");
+            return result with
+            {
+                Errors = errors,
+                Warnings = warnings
+            };
+        }
+
+        if (!result.ApiKeyPresent)
+        {
+            errors.Add("TWITTER_API_KEY is missing.");
+        }
+
+        if (!result.ApiSecretPresent)
+        {
+            errors.Add("TWITTER_API_SECRET is missing.");
+        }
+
+        if (!result.AccessTokenPresent)
+        {
+            errors.Add("TWITTER_ACCESS_TOKEN is missing.");
+        }
+
+        if (!result.AccessSecretPresent)
+        {
+            errors.Add("TWITTER_ACCESS_TOKEN_SECRET is missing.");
+        }
+
+        if (!IsConfigured)
+        {
+            return result with
+            {
+                Errors = errors,
+                Warnings = warnings
+            };
+        }
+
+        try
+        {
+            var parameters = new Dictionary<string, string>
+            {
+                ["include_entities"] = "false",
+                ["skip_status"] = "true"
+            };
+            var url = $"{VerifyCredentialsUrl}?{BuildQueryString(parameters)}";
+            var authHeader = _oauth1Helper.GenerateAuthorizationHeader("GET", VerifyCredentialsUrl, parameters);
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("Authorization", authHeader);
+
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+            var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                errors.Add($"OAuth verify_credentials failed. Status={(int)response.StatusCode} {response.StatusCode}. Response={Truncate(payload, 800)}");
+                return result with
+                {
+                    Errors = errors,
+                    Warnings = warnings
+                };
+            }
+
+            var account = JsonSerializer.Deserialize<TwitterVerifyCredentialsResponse>(payload);
+            result = result with
+            {
+                OauthWorking = true,
+                Username = account?.ScreenName ?? string.Empty,
+                UserId = account?.IdStr ?? account?.Id.ToString() ?? string.Empty
+            };
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"OAuth verify_credentials threw {ex.GetType().Name}: {ex.Message}");
+            return result with
+            {
+                Errors = errors,
+                Warnings = warnings
+            };
+        }
+
+        try
+        {
+            var mediaParameters = new Dictionary<string, string>
+            {
+                ["command"] = "INIT",
+                ["total_bytes"] = "68",
+                ["media_type"] = "image/png",
+                ["media_category"] = "tweet_image"
+            };
+            var authHeader = _oauth1Helper.GenerateAuthorizationHeader("POST", MediaUploadUrl, mediaParameters);
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, MediaUploadUrl);
+            request.Headers.Add("Authorization", authHeader);
+            request.Content = new FormUrlEncodedContent(mediaParameters);
+
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+            var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var upload = JsonSerializer.Deserialize<TwitterMediaUploadResponse>(payload);
+                result = result with
+                {
+                    MediaUploadAvailable = true,
+                    MediaHealthCheckMediaId = upload?.MediaIdString ?? string.Empty
+                };
+            }
+            else
+            {
+                errors.Add($"Media upload INIT failed. Status={(int)response.StatusCode} {response.StatusCode}. Response={Truncate(payload, 800)}");
+            }
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"Media upload check threw {ex.GetType().Name}: {ex.Message}");
+        }
+
+        var readAndWriteAvailable = result.OauthWorking && result.MediaUploadAvailable;
+        if (result.OauthWorking && !result.MediaUploadAvailable)
+        {
+            warnings.Add("OAuth read check passed, but media upload did not pass. Text-only publishing may still work, but image tweets are not available.");
+        }
+
+        warnings.Add("Write permission is checked non-destructively through OAuth verification and media INIT; no test tweet is posted.");
+
+        return result with
+        {
+            ReadAndWriteAvailable = readAndWriteAvailable,
+            CanPublish = result.OauthWorking,
+            Errors = errors,
+            Warnings = warnings
+        };
     }
 
     /// <summary>
@@ -183,6 +351,13 @@ public class TwitterApiClient
 
     private async Task<string?> UploadSingleMediaAsync(string mediaUrl)
     {
+        if (File.Exists(mediaUrl))
+        {
+            var localBytes = await File.ReadAllBytesAsync(mediaUrl);
+            var localContentType = GuessMediaTypeFromUrl(mediaUrl);
+            return await UploadSimpleMediaAsync(localBytes, localContentType);
+        }
+
         using var mediaResponse = await _httpClient.GetAsync(mediaUrl);
         if (!mediaResponse.IsSuccessStatusCode)
         {
@@ -441,6 +616,51 @@ public class TwitterApiClient
             _ => "application/octet-stream"
         };
     }
+
+    private static string BuildQueryString(IReadOnlyDictionary<string, string> parameters)
+        => string.Join("&", parameters.Select(kvp => $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));
+
+    private static string Truncate(string value, int maxLength)
+        => value.Length <= maxLength ? value : value[..maxLength] + "...";
+
+    private static bool IsEnabled(string name, bool defaultValue)
+    {
+        var value = Environment.GetEnvironmentVariable(name);
+        return string.IsNullOrWhiteSpace(value)
+            ? defaultValue
+            : bool.TryParse(value, out var enabled) ? enabled : defaultValue;
+    }
+}
+
+public sealed record TwitterHealthResult
+{
+    public bool XApiEnabled { get; init; }
+    public bool TwitterConfigured { get; init; }
+    public bool ApiKeyPresent { get; init; }
+    public bool ApiSecretPresent { get; init; }
+    public bool AccessTokenPresent { get; init; }
+    public bool AccessSecretPresent { get; init; }
+    public bool OauthWorking { get; init; }
+    public bool ReadAndWriteAvailable { get; init; }
+    public bool MediaUploadAvailable { get; init; }
+    public bool CanPublish { get; init; }
+    public string Username { get; init; } = string.Empty;
+    public string UserId { get; init; } = string.Empty;
+    public string MediaHealthCheckMediaId { get; init; } = string.Empty;
+    public IReadOnlyList<string> Errors { get; init; } = [];
+    public IReadOnlyList<string> Warnings { get; init; } = [];
+}
+
+public sealed class TwitterVerifyCredentialsResponse
+{
+    [JsonPropertyName("id")]
+    public long? Id { get; set; }
+
+    [JsonPropertyName("id_str")]
+    public string? IdStr { get; set; }
+
+    [JsonPropertyName("screen_name")]
+    public string? ScreenName { get; set; }
 }
 
 public class TweetRequest
