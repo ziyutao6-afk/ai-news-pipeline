@@ -48,18 +48,6 @@ public static class NewsFeedOptions
         new("Policy / Regulation", "Reuters Regulatory News", "https://www.reutersagency.com/feed/?best-topics=regulatory-news&post_type=best"),
         new("Policy / Regulation", "SEC Press Releases", "https://www.sec.gov/news/pressreleases.rss"),
         new("Policy / Regulation", "U.S. Treasury Press Releases", "https://home.treasury.gov/news/press-releases/rss"),
-        new("Policy / Regulation", "White House Briefing Room", "https://www.whitehouse.gov/briefing-room/feed/"),
-        new("Policy / Regulation", "ECB Press Releases", "https://www.ecb.europa.eu/rss/press.html"),
-        new("Policy / Regulation", "Bank of Japan", "https://www.boj.or.jp/en/rss/whatsnew.xml"),
-        new("Macro", "Federal Reserve Press Releases", "https://www.federalreserve.gov/feeds/press_all.xml"),
-        new("Macro", "IMF News", "https://www.imf.org/en/News/RSS"),
-        new("AI News", "OpenAI News", "https://openai.com/news/rss.xml"),
-        new("Global Impact", "NATO News", "https://www.nato.int/cps/en/natohq/rss.xml"),
-        new("Stocks", "CNBC Top News", "https://www.cnbc.com/id/100003114/device/rss/rss.html"),
-        new("Stocks", "Reuters Business", "https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best"),
-        new("Global Impact", "Reuters World", "https://www.reutersagency.com/feed/?best-topics=world&post_type=best"),
-        new("Big Tech", "The Verge", "https://www.theverge.com/rss/index.xml"),
-        new("Big Tech", "TechCrunch", "https://techcrunch.com/feed/"),
-        new("Sports", "BBC Football", "https://feeds.bbci.co.uk/sport/football/rss.xml")
+        new("Market Risk", "Federal Reserve Press Releases", "https://www.federalreserve.gov/feeds/press_all.xml")
     ];
 }

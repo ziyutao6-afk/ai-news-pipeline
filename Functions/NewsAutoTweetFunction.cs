@@ -524,9 +524,6 @@ public sealed class NewsAutoTweetFunction
             output.AppendLine($"English Tweet Body: {publishPlan.EnglishTweetBody}");
             output.AppendLine($"Chinese Brief: {publishPlan.ChineseBrief}");
             output.AppendLine($"Short Headline: {publishPlan.MarketAnalysis.ShortHeadline}");
-            output.AppendLine($"Market Impact: {publishPlan.MarketAnalysis.MarketImpact}");
-            output.AppendLine($"Impact Score: {publishPlan.MarketAnalysis.MarketImpactScore}/10");
-            output.AppendLine($"Low impact: {publishPlan.MarketAnalysis.MarketImpactScore < minAiImpactScore}");
             output.AppendLine($"Original URL: {publishPlan.Article.Link}");
             output.AppendLine($"Image: {publishPlan.ImageSource} | {publishPlan.ImageStatus}");
             output.AppendLine($"Open X Draft: {publishPlan.XDraftIntentUrl ?? "disabled"}");
@@ -772,14 +769,9 @@ public sealed class NewsAutoTweetFunction
         }
 
         var weightedLength = XPostLengthHelper.GetWeightedLength(tweet);
-        if (weightedLength < 400)
+        if (weightedLength > 280)
         {
-            return $"final_x_post too short ({weightedLength}/400 X-weighted chars)";
-        }
-
-        if (weightedLength > 1200)
-        {
-            return $"final_x_post too long ({weightedLength}/1200 X-weighted chars)";
+            return $"tweet too long ({weightedLength}/280 X-weighted chars)";
         }
 
         if (!OpenAiNewsTweetService.FinalQualityGate(tweet, link, string.Empty, out var gateReason))

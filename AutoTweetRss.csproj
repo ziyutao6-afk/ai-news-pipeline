@@ -7,6 +7,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove=".local\**" />
+    <None Remove=".local\**" />
     <Compile Remove="test-vscode-notes\**" />
     <None Remove="test-vscode-notes\**" />
   </ItemGroup>

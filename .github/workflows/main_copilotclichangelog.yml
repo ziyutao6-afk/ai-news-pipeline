@@ -4,9 +4,6 @@
 name: Build and deploy dotnet core project to Azure Function App - copilotclichangelog
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 env:

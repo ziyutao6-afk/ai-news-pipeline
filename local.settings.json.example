@@ -19,7 +19,7 @@
     "OPENAI_STOP_ON_SERVICE_UNAVAILABLE": "true",
     "X_TWEET_LANGUAGE": "en",
     "TELEGRAM_INCLUDE_CHINESE_BRIEF": "true",
-    "ENGLISH_TWEET_BODY_MAX_CHARS": "240",
+    "ENGLISH_TWEET_BODY_MAX_CHARS": "220",
     "CHINESE_BRIEF_MAX_CHARS": "160",
     "ENABLE_TWEET_IMAGE": "true",
     "DEFAULT_TWEET_IMAGE_PATH": "assets/default-news.png",
@@ -46,16 +46,13 @@
     "MAX_TWEETS_PER_RUN": "3",
     "NEWS_MIN_SCORE": "80",
     "NEWS_BREAKING_SCORE": "90",
-    "NEWS_DAILY_POST_LIMIT": "8",
-    "NEWS_BREAKING_EXTRA_DAILY_LIMIT": "3",
+    "NEWS_DAILY_POST_LIMIT": "3",
+    "NEWS_BREAKING_EXTRA_DAILY_LIMIT": "0",
     "NEWS_MAX_POSTS_PER_RUN": "3",
     "NEWS_MAX_CANDIDATES_PER_RUN": "20",
     "NEWS_MAX_ARTICLE_AGE_HOURS": "48",
-    "X_ACCOUNT_MONITORING_ENABLED": "false",
-    "X_ACCOUNT_POLL_INTERVAL_SECONDS": "120",
-    "X_ACCOUNT_WATCHLIST": "elonmusk,SpaceX,Tesla,WatcherGuru,WalterBloomberg,Reuters,Bloomberg,KobeissiLetter,MarioNawfal,unusual_whales,Ashcryptoreal,CryptoRoverCNN,BRICSinfo",
 
-    "NEWS_RSS_FEEDS": "AI News|MIT Technology Review AI|https://www.technologyreview.com/topic/artificial-intelligence/feed;AI News|VentureBeat AI|https://venturebeat.com/category/ai/feed;AI News|OpenAI News|https://openai.com/news/rss.xml;Crypto News|CoinDesk|https://www.coindesk.com/arc/outboundfeeds/rss/;Crypto News|Cointelegraph|https://cointelegraph.com/rss;Web3 News|Cointelegraph Web3|https://cointelegraph.com/rss;Web3 News|Decrypt|https://decrypt.co/feed;Web3 News|Crypto Briefing|https://cryptobriefing.com/feed/;Web3 News|Consensys|https://consensys.io/rssfeeds;Web3 News|AirdropAlert|https://airdropalert.com/feed/rssfeed;Web3 News|The Defiant|https://thedefiant.io/feed;Web3 News|DL News|https://www.dlnews.com/;Policy / Regulation|Reuters Regulatory News|https://www.reutersagency.com/feed/?best-topics=regulatory-news&post_type=best;Policy / Regulation|SEC Press Releases|https://www.sec.gov/news/pressreleases.rss;Policy / Regulation|U.S. Treasury Press Releases|https://home.treasury.gov/news/press-releases/rss;Policy / Regulation|White House Briefing Room|https://www.whitehouse.gov/briefing-room/feed/;Policy / Regulation|ECB Press Releases|https://www.ecb.europa.eu/rss/press.html;Policy / Regulation|Bank of Japan|https://www.boj.or.jp/en/rss/whatsnew.xml;Market Risk|Federal Reserve Press Releases|https://www.federalreserve.gov/feeds/press_all.xml;Market Risk|IMF News|https://www.imf.org/en/News/RSS;Global Impact|NATO News|https://www.nato.int/cps/en/natohq/rss.xml;Big Tech|The Verge|https://www.theverge.com/rss/index.xml;Big Tech|TechCrunch|https://techcrunch.com/feed/;Sports|BBC Football|https://feeds.bbci.co.uk/sport/football/rss.xml",
+    "NEWS_RSS_FEEDS": "AI News|MIT Technology Review AI|https://www.technologyreview.com/topic/artificial-intelligence/feed;AI News|VentureBeat AI|https://venturebeat.com/category/ai/feed;Crypto News|CoinDesk|https://www.coindesk.com/arc/outboundfeeds/rss/;Crypto News|Cointelegraph|https://cointelegraph.com/rss;Web3 News|Decrypt|https://decrypt.co/feed;Web3 News|The Defiant|https://thedefiant.io/feed;Policy / Regulation|Reuters Regulatory News|https://www.reutersagency.com/feed/?best-topics=regulatory-news&post_type=best;Policy / Regulation|SEC Press Releases|https://www.sec.gov/news/pressreleases.rss;Market Risk|Federal Reserve Press Releases|https://www.federalreserve.gov/feeds/press_all.xml",
 
     "ENABLE_LEGACY_RELEASE_FUNCTIONS": "false",
     "AzureWebJobs.ReleaseNotifier.Disabled": "true",
@@ -75,8 +72,6 @@
     "AI_MODEL": "gpt-4o-mini",
     "ENABLE_AI_SUMMARIES": "false",
     "X_CLI_CHANGELOG_PREMIUM_MODE": "false",
-    "X_VSCODE_PREMIUM_MODE": "false",
-    "THREAD_MAX_POSTS": "4",
-    "THREAD_TOP_HIGHLIGHTS": "3"
+    "X_VSCODE_PREMIUM_MODE": "false"
   }
 }

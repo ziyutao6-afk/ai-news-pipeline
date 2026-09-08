@@ -158,8 +158,10 @@ public sealed class TelegramNotificationService
             await SendPhotoAsync(token, chatId, plan, cancellationToken);
         }
 
-        var thread = BuildThreadPreview(plan.FinalXPost, plan.Article.Link);
-        var keyboard = BuildReviewKeyboard(plan.PendingPostId, plan.Article.Link, BuildXDraftIntentUrl(thread.Tweet1));
+        var draftUrl = string.IsNullOrWhiteSpace(plan.XDraftIntentUrl)
+            ? BuildXDraftIntentUrl(plan.FinalXPost)
+            : plan.XDraftIntentUrl;
+        var keyboard = BuildReviewKeyboard(plan.PendingPostId, plan.Article.Link, draftUrl);
         if (!string.IsNullOrWhiteSpace(plan.PendingPostId))
         {
             _logger.LogInformation(
@@ -305,91 +307,22 @@ public sealed class TelegramNotificationService
 
     private static string BuildReviewItemMessage(NewsTweetPlan plan)
     {
-        var analysis = plan.MarketAnalysis;
-        var impactLevel = BuildImpactLevel(analysis.MarketImpactScore);
-        var isWeb3 = plan.Article.Category.Contains("Web3", StringComparison.OrdinalIgnoreCase);
-        var thread = BuildThreadPreview(plan.FinalXPost, plan.Article.Link);
         var lines = new List<string>
         {
-            $"🚨 {analysis.ShortHeadline}",
+            $"{plan.Score.Total}/100 | {plan.Article.Category} | {plan.Article.SourceName}",
+            plan.Article.Title,
             string.Empty,
-            "Category:",
-            plan.Article.Category,
-            "Source:",
-            plan.Article.SourceName,
-            "Local Score:",
-            $"{plan.Score.Total}/100",
-            "Market Impact:",
-            analysis.MarketImpact,
-            "Contrarian Angle:",
-            analysis.ContrarianAngle,
-            "Why It Matters:",
-            analysis.WhyItMatters,
-            "Market Implication:",
-            analysis.MarketImplication,
-            "Related Assets:",
-            FormatList(analysis.AffectedAssets),
-            "Hashtags:",
-            FormatList(analysis.Hashtags),
-            "AI Take:",
-            analysis.TradeTake,
-            "Bottom Line:",
-            analysis.BottomLine,
-            "Impact Score:",
-            $"{analysis.MarketImpactScore}/10 ({impactLevel})",
-            "AI Confidence:",
-            $"{analysis.ConfidenceScore}/10",
-            "Raw AI Response:",
-            BuildRawAiResponse(plan),
-            string.Empty,
-            "Final X Post:",
+            "Generated Tweet:",
             plan.FinalXPost,
-            "Final X Post Length:",
-            $"{XPostLengthHelper.GetWeightedLength(plan.FinalXPost)}",
-            "Thread Mode:",
-            thread.ThreadMode ? "true" : "false",
-            "Tweet 1:",
-            thread.Tweet1,
-            thread.ThreadMode ? "Open X Draft Tweet 1:" : "Open X Draft:",
-            BuildXDraftIntentUrl(thread.Tweet1),
-            "Tweet 2:",
-            thread.Tweet2,
-            "Open X Draft Tweet 2:",
-            thread.ThreadMode && !string.Equals(thread.Tweet2, "none", StringComparison.OrdinalIgnoreCase)
-                ? BuildXDraftIntentUrl(thread.Tweet2)
-                : "none",
-            "Reject Reason:",
-            BuildRejectReason(plan),
-            string.Empty,
+            "Chinese Brief:",
+            plan.ChineseBrief,
             "Original URL:",
             plan.Article.Link,
-            $"source_url: {plan.Article.Link}",
-            $"Image Path: {BuildImageLine(plan)}",
-            "Status: pending"
+            "Image:",
+            BuildImageLine(plan),
+            "Open X Draft:",
+            string.IsNullOrWhiteSpace(plan.XDraftIntentUrl) ? BuildXDraftIntentUrl(plan.FinalXPost) : plan.XDraftIntentUrl
         };
-
-        if (isWeb3)
-        {
-            var insertAt = lines.IndexOf("Related Assets:");
-            if (insertAt >= 0)
-            {
-                lines.Insert(insertAt, string.IsNullOrWhiteSpace(analysis.Web3Segment) ? "Web3" : analysis.Web3Segment);
-                lines.Insert(insertAt, "Web3 Segment:");
-            }
-        }
-
-        if (IsEnabledValue("TELEGRAM_INCLUDE_CHINESE_BRIEF", defaultValue: true)
-            && !string.IsNullOrWhiteSpace(plan.ChineseBrief))
-        {
-            lines.Insert(2, $"中文解读: {plan.ChineseBrief}");
-        }
-
-        if (IsEnabledValue("GENERATE_X_INTENT_LINK", defaultValue: true) && !thread.ThreadMode)
-        {
-            lines.Add(string.Empty);
-            lines.Add("Open X Draft:");
-            lines.Add(BuildXDraftIntentUrl(plan.FinalXPost));
-        }
 
         var message = string.Join('\n', lines);
         return message.Length <= MaxTelegramMessageLength
@@ -413,125 +346,6 @@ public sealed class TelegramNotificationService
         var sourceUrl = string.IsNullOrWhiteSpace(plan.ImageUrl) ? "no image_url" : plan.ImageUrl;
         return $"{image} ({sourceUrl}; {plan.ImageSource ?? "none"} | {plan.ImageStatus ?? "not prepared"})";
     }
-
-    private static ThreadPreview BuildThreadPreview(string finalPost, string sourceUrl)
-    {
-        var length = XPostLengthHelper.GetWeightedLength(finalPost);
-        if (length <= 280)
-        {
-            return new ThreadPreview(false, finalPost, "none");
-        }
-
-        var parts = SplitIntoThreadSentences(finalPost, sourceUrl);
-
-        var tweet1Lines = new List<string>();
-        foreach (var part in parts)
-        {
-            var candidate = string.Join("\n\n", tweet1Lines.Concat([part]));
-            if (XPostLengthHelper.GetWeightedLength(candidate) > 280)
-            {
-                break;
-            }
-
-            tweet1Lines.Add(part);
-        }
-
-        if (tweet1Lines.Count == 0 && parts.Count > 0)
-        {
-            tweet1Lines.Add(parts[0]);
-        }
-
-        var tweet1 = string.Join("\n\n", tweet1Lines).Trim();
-        var tweet2 = string.Join("\n\n", parts.Skip(tweet1Lines.Count)).Trim();
-        return new ThreadPreview(true, tweet1, string.IsNullOrWhiteSpace(tweet2) ? "none" : tweet2);
-    }
-
-    private static List<string> SplitIntoThreadSentences(string finalPost, string sourceUrl)
-    {
-        var content = finalPost
-            .Replace(sourceUrl, string.Empty, StringComparison.OrdinalIgnoreCase)
-            .Replace("Source:", string.Empty, StringComparison.OrdinalIgnoreCase);
-        var matches = System.Text.RegularExpressions.Regex.Matches(content, @"[^.!?\n]+[.!?]", System.Text.RegularExpressions.RegexOptions.Multiline);
-        var sentences = matches
-            .Select(match => match.Value.Trim())
-            .Where(sentence => !string.IsNullOrWhiteSpace(sentence))
-            .ToList();
-        if (sentences.Count > 0)
-        {
-            return sentences;
-        }
-
-        return content
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(part => !string.IsNullOrWhiteSpace(part))
-            .ToList();
-    }
-
-    private static string BuildRawAiResponse(NewsTweetPlan plan)
-    {
-        var parts = new[]
-        {
-            plan.EnglishTweetBody,
-            plan.MarketAnalysis.Summary,
-            plan.MarketAnalysis.ContrarianAngle,
-            plan.MarketAnalysis.WhyItMatters,
-            plan.MarketAnalysis.MarketImplication,
-            plan.MarketAnalysis.TradeTake,
-            plan.MarketAnalysis.BottomLine
-        };
-        var text = string.Join(" | ", parts.Where(part => !string.IsNullOrWhiteSpace(part)));
-        return text.Length <= 900 ? text : text[..900].TrimEnd() + "...";
-    }
-
-    private static string BuildRejectReason(NewsTweetPlan plan)
-    {
-        if (string.IsNullOrWhiteSpace(plan.Article.Link))
-        {
-            return "source_url missing";
-        }
-
-        if (string.IsNullOrWhiteSpace(plan.FinalXPost))
-        {
-            return "final_x_post empty";
-        }
-
-        if (plan.FinalXPost.Contains(plan.Article.Link, StringComparison.OrdinalIgnoreCase))
-        {
-            return "raw source_url should not be printed in final_x_post";
-        }
-
-        var length = XPostLengthHelper.GetWeightedLength(plan.FinalXPost);
-        if (length < 400)
-        {
-            return $"final_x_post too short ({length}/400)";
-        }
-
-        if (length > 1200)
-        {
-            return $"final_x_post too long ({length}/1200)";
-        }
-
-        if (!OpenAiNewsTweetService.FinalQualityGate(plan.FinalXPost, plan.Article.Link, plan.Article.Category, out var gateReason))
-        {
-            return gateReason;
-        }
-
-        return "none";
-    }
-
-    private sealed record ThreadPreview(bool ThreadMode, string Tweet1, string Tweet2);
-
-    private static string FormatList(IReadOnlyList<string> values)
-        => values.Count == 0 ? "none" : string.Join(" ", values);
-
-    private static string BuildImpactLevel(int score)
-        => score switch
-        {
-            <= 3 => "Low",
-            <= 6 => "Medium",
-            <= 8 => "High",
-            _ => "Critical"
-        };
 
     private static TelegramInlineKeyboardMarkup? BuildReviewKeyboard(string? pendingPostId, string sourceUrl, string draftUrl)
         => string.IsNullOrWhiteSpace(pendingPostId)
