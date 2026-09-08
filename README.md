@@ -25,11 +25,8 @@ dotnet build
 ## Structure / 目录
 
 ```text
-.dotnet-home/
-.dotnet/
 .github/
 .gitignore
-.nuget/
 .vscode/
 AutoTweetRss.csproj
 Functions/
@@ -39,7 +36,6 @@ README_DEPLOY_LOCAL.md
 Services/
 assets/
 auto-tweet-rss.sln
-azurite/
 host.json
 restart-functions-local.sh
 start-azurite.sh
@@ -62,3 +58,7 @@ test-vscode-notes/
 ## Topics
 
 c, net, azure-functions, automation
+
+## Deployment trigger / 部署触发
+
+Azure 部署工作流仅允许在 GitHub Actions 中手动触发；普通 push 不会部署线上 Function App。
